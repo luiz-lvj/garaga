@@ -30,6 +30,7 @@ class Curve:
     id: int
     p: int
     n: int  # order
+    x: int | None  # curve x paramter
     h: int  # cofactor
     irreducible_polys: dict[int, list[int]]
     nr_a0: int  # E2 non residue
@@ -87,6 +88,7 @@ CURVES: dict[int, Curve] = {
         id=BN254_ID,
         p=0x30644E72E131A029B85045B68181585D97816A916871CA8D3C208C16D87CFD47,
         n=0x30644E72E131A029B85045B68181585D2833E84879B9709143E1F593F0000001,
+        x=0x44e992b44a6909f1,
         h=1,
         irreducible_polys={
             6: [82, 0, 0, -18, 0, 0, 1],
@@ -123,6 +125,7 @@ CURVES: dict[int, Curve] = {
         id=BLS12_381_ID,
         p=0x1A0111EA397FE69A4B1BA7B6434BACD764774B84F38512BF6730D2A0F6B0F6241EABFFFEB153FFFFB9FEFFFFFFFFAAAB,
         n=0x73EDA753299D7D483339D80809A1D80553BDA402FFFE5BFEFFFFFFFF00000001,
+        x=-0xd201000000010000,
         h=0x396C8C005555E1568C00AAAB0000AAAB,
         irreducible_polys={
             6: [2, 0, 0, -2, 0, 0, 1],
@@ -159,6 +162,7 @@ CURVES: dict[int, Curve] = {
         id=SECP256K1_ID,
         p=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F,
         n=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141,
+        x=None,
         h=1,
         irreducible_polys={},
         nr_a0=None,
@@ -179,6 +183,7 @@ CURVES: dict[int, Curve] = {
         id=SECP256R1_ID,
         p=0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF,
         n=0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551,
+        x=None,
         h=1,
         irreducible_polys={},
         nr_a0=None,
@@ -199,6 +204,7 @@ CURVES: dict[int, Curve] = {
         id=X25519_ID,
         p=0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED,
         n=0x1000000000000000000000000000000014DEF9DEA2F79CD65812631A5CF5D3ED,
+        x=None,
         h=8,
         irreducible_polys={},
         nr_a0=None,
