@@ -1,6 +1,7 @@
 import numpy as np
 from dataclasses import dataclass
-from src.definitions import CURVES
+from src.definitions import CURVES, get_base_field
+import random
 from src.algebra import PyFelt
 
 
@@ -278,6 +279,10 @@ class E12:
     def one(curve_id: int):
         return E12([E6.one(curve_id), E6.zero(curve_id)], curve_id)
 
+    @staticmethod
+    def random(curve_id: int):
+        field = get_base_field(curve_id)
+        return E12([field(random.randint(0, field.p - 1)) for _ in range(12)], curve_id)
     def __init__(self, x: list[PyFelt | E6], curve_id: int):
         self.curve_id = curve_id
         if type(x[0]) == PyFelt and len(x) == 12:

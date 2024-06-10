@@ -6,11 +6,14 @@ from src.definitions import (
     get_base_field,
     CURVES,
     BN254_ID,
+    BLS12_381_ID,
+    CurveID,
     get_irreducible_poly,
 )
+import math
 from src.hints.tower_backup import E12
 
-curve = CURVES[BN254_ID]
+
 field = get_base_field(BN254_ID)
 irreducible_poly = get_irreducible_poly(curve_id=BN254_ID, extension_degree=12)
 
@@ -51,54 +54,128 @@ def e12_to_direct_poly(a: E12) -> Polynomial:
     )
 
 
-# bn254 curve properties from https://hackmd.io/@jpw/bn254
-q = curve.p
-x = curve.x
-r = curve.n
-# (q**12 - 1) is the exponent of the final exponentiation
+import sympy
 
-unity = E12.one(curve_id=BN254_ID)
 
-# Section 4.3.1 Parameters
-h = (q**12 - 1) // r  # = 3^3 · l # where gcd(l, 3) = 1
-l = h // (3**3)
-λ = 6 * x + 2 + q - q**2 + q**3
-m = λ // r
-d = 3  # = gcd(m, h)
-m_dash = m // d  # m' = m/d
+def is_prime(num: int) -> bool:
+    return sympy.isprime(num)
 
-# equivalently, λ = 3rm′.
-assert 3 * r * m_dash == λ, "incorrect parameters"  # sanity check
 
-# precompute r' and m''
-r_inv = 495819184011867778744231927046742333492451180917315223017345540833046880485481720031136878341141903241966521818658471092566752321606779256340158678675679238405722886654128392203338228575623261160538734808887996935946888297414610216445334190959815200956855428635568184508263913274453942864817234480763055154719338281461936129150171789463489422401982681230261920147923652438266934726901346095892093443898852488218812468761027620988447655860644584419583586883569984588067403598284748297179498734419889699245081714359110559679136004228878808158639412436468707589339209058958785568729925402190575720856279605832146553573981587948304340677613460685405477047119496887534881410757668344088436651291444274840864486870663164657544390995506448087189408281061890434467956047582679858345583941396130713046072603335601764495918026585155498301896749919393
-assert r_inv * r % h == 1, "r_inv should be the inverse of r"
-m_d_inv = 17840267520054779749190587238017784600702972825655245554504342129614427201836516118803396948809179149954197175783449826546445899524065131269177708416982407215963288737761615699967145070776364294542559324079147363363059480104341231360692143673915822421222230661528586799190306058519400019024762424366780736540525310403098758015600523609594113357130678138304964034267260758692953579514899054295817541844330584721967571697039986079722203518034173581264955381924826388858518077894154909963532054519350571947910625755075099598588672669612434444513251495355121627496067454526862754597351094345783576387352673894873931328099247263766690688395096280633426669535619271711975898132416216382905928886703963310231865346128293216316379527200971959980873989485521004596686352787540034457467115536116148612884807380187255514888720048664139404687086409399
-assert m_d_inv * m_dash % h == 1, "r_inv should be the inverse of r"
+def sample_xth_root(curve_id: int, x: int) -> E12:
+    if x < 0:
+        x_pos = -x
+    r = E12.random(curve_id)
+    p = CURVES[curve_id].p
+    pow1 = p**12 - 1
+    assert r**pow1 == E12.one(curve_id)
+    pow2 = pow1 // x_pos
+    root = r**pow2
+    assert root**x_pos == E12.one(curve_id)
+    root = root.__inv__() if x < 0 else root
+    return root
 
-root_27th = int_to_e12(
-    [
-        0,
-        0,
-        0,
-        0,
-        8204864362109909869166472767738877274689483185363591877943943203703805152849,
-        17912368812864921115467448876996876278487602260484145953989158612875588124088,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-    ]
+
+xth_root = CURVES[BLS12_381_ID].x - 1
+r = sample_xth_root(BLS12_381_ID, xth_root)
+assert (r ** (-xth_root)).__inv__() == E12.one(BLS12_381_ID)
+
+
+def build_params(
+    curve_id: CurveID,
+) -> tuple[int, int, int, int, int, int]:
+    q = CURVES[curve_id.value].p
+    x = CURVES[curve_id.value].x
+    r = CURVES[curve_id.value].n
+
+    h = (q**12 - 1) // r  # = 3^3 · l # where gcd(l, 3) = 1
+    print(f"h is prime : {is_prime(h)}")
+    assert math.gcd(r, h) == 1
+    if curve_id.value == CurveID.BN254.value:
+        base = 3
+    elif curve_id.value == CurveID.BLS12_381.value:
+        base = x - 1
+        base = 3
+    k, l = decompose_scalar_into_b_powers_and_remainder(h, base)
+    assert base**k * l == h, f"{base}^k * l should be h"
+    assert h % (base**k) == 0, f"h should be a multiple of {base}^k"
+    assert math.gcd(l, base) == 1, f"l should be coprime with {base}"
+
+    if curve_id.value == CurveID.BN254.value:
+        λ = (
+            6 * x + 2 + q - q**2 + q**3
+        )  # https://eprint.iacr.org/2008/096.pdf See section 4 for BN curves.
+    elif curve_id.value == CurveID.BLS12_381.value:
+        λ = (
+            -x + q
+        )  # See https://gist.github.com/feltroidprime/6b43acc290fd6fd6d7f3cf2017047f62
+
+    assert λ % r == 0, "λ should be a multiple of r. See section 4.2.2"
+    m = λ // r
+    d = math.gcd(m, h)
+
+    # Theorem 3 proof fails: ?
+    # assert (
+    #     math.gcd(d**3, r * m) == 1
+    # ), f"d should be coprime with r*m, but gcd is {math.gcd(d, r * m)}"
+    print(f"d: {d}, (x-1): {x-1}")
+
+    assert m % d == 0, "m should be a multiple of d"
+    m_dash = m // d  # m' = m/d
+    assert m_dash % h != 0
+    f"m/d should not divide h. See section 4.2.2 Theorem 2."
+    assert d * r * m_dash == λ, "incorrect parameters"  # sanity check
+    assert math.gcd(λ, q**12 - 1) == d * r
+    assert (
+        math.gcd(m_dash, q**12 - 1) == 1
+    ), f"m_dash should be coprime with q**12 - 1 'by construction'. See 4.3.2 computing m-th root"
+    # equivalently, λ = 3rm′.
+    # precompute r' and m''
+    r_inv = pow(r, -1, h)
+    m_d_inv = pow(m_dash, -1, h)
+    return h, l, λ, m, m_dash, d, r, r_inv, m_d_inv
+
+
+def be_to_int(bits: list[int]) -> int:
+    """
+    Convert a list of bits (1s and 0s), assuming big endian format, to an integer.
+
+    Args:
+    bits (list[int]): The list of bits (1s and 0s).
+
+    Returns:
+    int: The integer representation of the bits.
+    """
+    return int("".join(str(bit) for bit in bits), 2)
+
+
+def decompose_scalar_into_b_powers_and_remainder(scalar: int, b: int):
+    """
+    Decompose scalar into b^k * l, where l is not divisible by b.
+    """
+
+    k = 0
+    l = scalar
+
+    while l % b == 0:
+        l //= b
+        k += 1
+    assert l % b != 0, "l should not be divisible by b"
+    assert scalar == b**k * l, "scalar should be the product of b^k * l"
+    return k, l
+
+
+h_bn = (CURVES[BN254_ID].p ** 12 - 1) // CURVES[BN254_ID].n
+h_bls = (CURVES[BLS12_381_ID].p ** 12 - 1) // CURVES[BLS12_381_ID].n
+k_bn, l_bn = decompose_scalar_into_b_powers_and_remainder(h_bn, b=3)
+k_bls, l_bls = decompose_scalar_into_b_powers_and_remainder(
+    h_bls,
+    b=(CURVES[BLS12_381_ID].x - 1),
 )
 
-assert root_27th**27 == unity, "root_27th**27 should be one"
-assert root_27th**9 != unity, "root_27th**9 should not be one"
+print(f"k_bn: {k_bn}, l_bn: {l_bn}")
+print(f"k_bls: {k_bls}, l_bls: {l_bls}")
 
-# this is not verified here in python, but sourced directly from:
-# https://github.com/geometers/pairing-witness/blob/main/src/tonelli_shanks.rs#L21
-exp = 0b1110001000001010101110000110000110011101100000001010110110111100110111000101011100001110111010110001010000111001001001010001100000011000110000000111000010110110110000111110000011010101011100101010100001001100010000100010001100110000100101101000101100000011000110001001110011010011000100010010100101000110001100110000100100101111010001101000101001011010011001100111110100111110101110101011101100001000110111001011010000001110001111111101111001010101111110100010010001011001111100100110010001011010000011110101001100010100000101110000110110101111001001000001110110111001110010001000110001110011101101101111010001010100000001111001100101101000011010111010001101110100010011110001010101101100101011111001001000110000011011101001010101100010110001011011010101001110010100100100000111011100001011110001000100101001111110110010100010100110010101111110000110001011101001111111110101101110100011101111000011101100111100110100100000101111001011001100000100100001101111010111001001100000110010110010000011001101100101110100001101011101010100011111001100101010110001110110101011101001010110001011100110011110110010100111001100111100101000100011110011001101111000111011001001001000000110011101110011101011000100111010100101110100111001000000011010010000110001100110111001001111001100000101001111000001110101110111000101010110111011110110110011101110000000001110000011101000010011110101001110101000100111100001010111101000010110010010110101001111100111101011000111100110001011001101000111011001000111100011110110011010010110110110010100100011111010100110011101100010001101111110100110001101001100010001110111000100000010001100001010000000000000011101100000010001001011001110001000011010100110111011100001001101100001110111101000001111000111110011001101010100100010101111110110111110011000101100010101011101000000101110010000111011001101101111101000101001011100111100011001110111010100110001110001111000110000000011110100111000110010110111001001111100011001111101111101101101111111110110010111100111000010000101011000000100010100101100001101110100111011001011100101000101111100000100001111100011011101010110110110111111101000010011001111001101010010111000001001010000000101000011001100101001000000011001110010000111001000110101010100111100011010010001010000000110110000000000101000001101101010100000001000001011101101001100011011000101110010100010111001010101011000111101100010001010101110111000101101100100011100110000111111100110101100000001110110111110101110100000111010111000001101001001101010100110111101010101100110111000000110000001011101001011101000111111100101011101110001100100011010010110010001001000100011010100100000111110010101111000101010001100001111101100000111110110010101110000000100110101001101011110001101100011111010100111001101111010100100101010101110111100011110010101111010100100000111100110101001000111101001110011110110001111011010101110011011101111110101100110110110010111101010001110100010011111100011010000110000111101101101111111100000100011100111110001110000111000100000010101000001101001100110001111010000110000111001011
+E = be_to_int([0])
 
 # Section 4.3.2 Finding c
 # find some u a cubic non-residue and c such that f = c**λ * u.
@@ -110,17 +187,19 @@ exp = 0b111000100000101010111000011000011001110110000000101011011011110011011100
 
 def pow_3_ord(a: E12):
     t = 0
-    while a != unity:
+    while a != FP12_ONE:
         t += 1
         a = a**3
     return t
 
 
-def find_cube_root(a: E12, w: E12) -> E12:
+def find_cube_root(a: E12, w: E12, q: int) -> E12:
     # Algorithm 4: Modified Tonelli-Shanks for cube roots
     # Input: Cube residue a, cube non residue w and write p − 1 = 3^r · s such that 3 ∤ s
     # Output: x such that x^3 = a
     # 1 exp = (s + 1)/3
+    _, s = decompose_scalar_into_b_powers_and_remainder(q**12 - 1, 3)
+    exp: int = (s + 1) // 3
     a_inv = a.__inv__()
     # 2 x ← a^exp
     x = a**exp
@@ -138,20 +217,21 @@ def find_cube_root(a: E12, w: E12) -> E12:
     return x
 
 
-def find_c_e12(f: E12, w: E12 = root_27th):
+def find_c_e12(f: E12, w: E12):
     # Algorithm 5: Algorithm for computing λ residues over BN curve
     # Input: Output of a Miller loop f and fixed 27-th root of unity w
     # Output: (c, wi) such that c**λ = f · wi
     # 1 s = 0
     s = 0
-    exp = (q**12 - 1) // 3
+    p = CURVES[f.curve_id].p
+    exp = (p**12 - 1) // 3
     # 2 if f**(q**k-1)/3 = 1 then
-    if f**exp == unity:
+    if f**exp == FP12_ONE:
         # 3 continue
         # 4 end
         # 5 else if (f · w)**(q**k-1)/3 = 1 then
         c = f
-    elif (f * w) ** exp == unity:
+    elif (f * w) ** exp == FP12_ONE:
         # 6 s = 1
         s = 1
         # 7 f ← f · w
@@ -169,15 +249,15 @@ def find_c_e12(f: E12, w: E12 = root_27th):
     # 14 c ← c**m′′
     c = c**m_d_inv
     # 15 c ← c**1/3 (by using modified Tonelli-Shanks 4)
-    c = find_cube_root(c, w)
+    c = find_cube_root(c, w, p)
     # 16 return (c, ws)
     return c, w**s
 
 
-def find_c(f: Polynomial) -> tuple[Polynomial, Polynomial]:
+def find_c(f: Polynomial, w: E12) -> tuple[Polynomial, Polynomial]:
     assert f.degree() == 11, "incorrect degree of polynomial"
-    f = int_to_e12(direct_to_tower(f.coefficients, curve.id, 12))
-    c, wi = find_c_e12(f)
+    f = int_to_e12(direct_to_tower(f.coefficients, BN254_ID, 12))
+    c, wi = find_c_e12(f, w)
     return e12_to_direct_poly(c), e12_to_direct_poly(wi)
 
 
@@ -218,13 +298,40 @@ if __name__ == "__main__":
         0x14354C051802F8704939C9948EF91D89DB28FE9513AD7BBF58A4639AF347EA86,
     ]
 
+    _ = build_params(CurveID.BN254)
+    print(f"bn ok")
+    h, l, λ, m, m_dash, d, r, r_inv, m_d_inv = build_params(CurveID.BLS12_381)
+
+    h, l, λ, m, m_dash, d, r, r_inv, m_d_inv = build_params(CurveID.BN254)
+
     print("\n------------------ Testing with E12 ----------------------\n\n")
+    FP12_ONE = E12.one(curve_id=BN254_ID)
+
+    root_27th = int_to_e12(
+        [
+            0,
+            0,
+            0,
+            0,
+            8204864362109909869166472767738877274689483185363591877943943203703805152849,
+            17912368812864921115467448876996876278487602260484145953989158612875588124088,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ]
+    )
+
+    assert root_27th**27 == FP12_ONE, "root_27th**27 should be one"
+    assert root_27th**9 != FP12_ONE, "root_27th**9 should not be one"
 
     f = int_to_e12(f_coeffs)
 
     print("Computing residue witness for f,")
     print_e12("f =", f)
-
+    print_e12("f**h =", f**h)
     c, wi = find_c_e12(f)
     c_inv = c.__inv__()
 
@@ -236,7 +343,7 @@ if __name__ == "__main__":
 
     result = c_inv**λ * f * wi
     print_e12("c_inv ** λ * f * wi (pairing) result:", result)
-    assert result == unity, "pairing not 1"
+    assert result == FP12_ONE, "pairing not 1"
 
     print("\n--------------- Testing with Polynomial ------------------\n\n")
 
