@@ -35,6 +35,8 @@ jobs:
         run: |
           docker compose up --build --exit-code-from app
           git status --porcelain
+          echo "Git Diff for specific files:"
+          git diff -- src/wasm/pkg/garaga_rs.js src/wasm/pkg/garaga_rs_bg.wasm.js
           [[ -z $(git status --porcelain ) ]]
       - name: Upload package file as artifact
         uses: actions/upload-artifact@v4
