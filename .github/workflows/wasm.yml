@@ -35,8 +35,6 @@ jobs:
         run: |
           docker compose up --build --exit-code-from app
           git status --porcelain
-          echo "Wasm pack version"
-          wasm-pack --version
           echo "Git diff"
           git diff
           [[ -z $(git status --porcelain ) ]]
