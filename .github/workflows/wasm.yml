@@ -36,6 +36,12 @@ jobs:
           docker compose up --build --exit-code-from app
           git status --porcelain
           [[ -z $(git status --porcelain ) ]]
+      - name: Upload package file as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: tools/npm/garaga_ts/*.tgz
+          if-no-files-found: error
 
   test-integration:
     name: Test integration
