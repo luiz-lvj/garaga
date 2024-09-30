@@ -15,4 +15,11 @@ ENV PATH="$HOME/n/bin/:$PATH"
 
 WORKDIR /garaga/tools/npm/garaga_ts
 
+# Add a step to output versions
+RUN echo "Rust version: $(rustc --version)" && \
+    echo "Cargo version: $(cargo --version)" && \
+    echo "wasm-pack version: $(wasm-pack --version)" && \
+    echo "Node version: $(node --version)" && \
+    echo "NPM version: $(npm --version)"
+
 CMD npm ci && npm run build && npm pack && ./fix-chown.sh ../..

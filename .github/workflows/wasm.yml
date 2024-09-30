@@ -30,20 +30,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Output versions
-        run: |
-          echo "Node version:"
-          node --version
-          echo "NPM version:"
-          npm --version
-          echo "Cargo version:"
-          cargo --version
-          echo "wasm-pack version:"
-          wasm-pack --version
-          echo "Docker version:"
-          docker --version
-          echo "Docker Compose version:"
-          docker compose version
       - name: Build and check for changes in generated code
         working-directory: tools/npm/garaga_ts
         run: |
