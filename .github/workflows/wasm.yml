@@ -36,8 +36,6 @@ jobs:
           node --version
           echo "NPM version:"
           npm --version
-          echo "Rust version:"
-          rustc --version
           echo "Cargo version:"
           cargo --version
           echo "wasm-pack version:"
