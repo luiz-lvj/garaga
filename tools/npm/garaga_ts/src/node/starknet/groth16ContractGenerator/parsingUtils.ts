@@ -20,7 +20,7 @@ export interface Groth16Proof {
     publicInputs: bigint[],
     curveId?: CurveId,
     imageId?: Uint8Array,
-    journalDigest?: Uint8Array
+    journal?: Uint8Array
 }
 
 export interface Groth16VerifyingKey {
@@ -243,7 +243,7 @@ export const parseGroth16ProofFromObject = (data: any, publicInputsData?: bigint
 }
 
 
-export const createGroth16ProofFromRisc0 = (seal: Uint8Array, imageId: Uint8Array, journal: Uint8Array,
+export const createGroth16ProofFromRisc0 = (seal: Uint8Array, imageId: Uint8Array, journalBytes: Uint8Array,
     controlRoot: bigint = RISC0_CONTROL_ROOT, bn254ControlId: bigint = RISC0_BN254_CONTROL_ID): Groth16Proof => {
 
     if(imageId.length <= 32){
@@ -253,8 +253,8 @@ export const createGroth16ProofFromRisc0 = (seal: Uint8Array, imageId: Uint8Arra
     const [constrolRoot0, controlRoot1] = splitDigest(controlRoot);
 
     const proof = seal.slice(4);
-    const journalDigest = createHash("sha256").update(journal).digest();
-    const claimDigest = digestReceiptClaim(ok(imageId, journalDigest));
+    const journal = createHash("sha256").update(journalBytes).digest();
+    const claimDigest = digestReceiptClaim(ok(imageId, journal));
 
     const [claim0, claim1] = splitDigest(claimDigest);
 
@@ -288,7 +288,7 @@ export const createGroth16ProofFromRisc0 = (seal: Uint8Array, imageId: Uint8Arra
             bn254ControlId
         ],
         imageId,
-        journalDigest
+        journal
     }
     if(checkGroth16Proof(groth16Proof)){
         return groth16Proof;
