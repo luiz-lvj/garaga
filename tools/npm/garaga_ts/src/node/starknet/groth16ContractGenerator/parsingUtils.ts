@@ -51,6 +51,12 @@ interface ReceiptClaim {
     tagDigest?: Uint8Array;
 }
 
+export class KeyPatternNotFoundError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "KeyPatternNotFoundError";
+    }
+}
 
 
 
@@ -188,9 +194,15 @@ export const parseGroth16ProofFromObject = (data: any, publicInputsData?: bigint
 
         try{
 
+            console.log("AQUI BEFORE")
+
             const sealHex = toHexStr(findItemFromKeyPatterns(proof, ['seal']));
             const imageIdHex = toHexStr(findItemFromKeyPatterns(proof, [ 'image_id']));
             const journalHex = toHexStr(findItemFromKeyPatterns(proof, ['journal']));
+
+            console.log("journalHex: ", journalHex);
+
+            console.log("LATER: ", journalHex);
 
             const sealBytes = hexStringToBytes(sealHex);
             const imageIdBytes = hexStringToBytes(imageIdHex);
@@ -199,6 +211,7 @@ export const parseGroth16ProofFromObject = (data: any, publicInputsData?: bigint
             return createGroth16ProofFromRisc0(sealBytes, imageIdBytes, journalBytes)
 
         } catch(err){
+            console.log("ERROR AQUI: ", err);
 
         }
 
@@ -217,7 +230,12 @@ export const parseGroth16ProofFromObject = (data: any, publicInputsData?: bigint
                 throw new Error(`Invalid public inputs format: ${publicInputsData}`);
             }
         } else{
-            publicInputs = findItemFromKeyPatterns(data, ['public']);
+
+            try {
+                publicInputs = findItemFromKeyPatterns(data, ['public']);
+            } catch(err){
+                throw new Error(`Error: ${err}`);
+            }
         }
         const a = tryParseG1PointFromKey(proof, ['a'], curveId);
         const b = tryParseG2PointFromKey(proof, ['b'], curveId);
@@ -246,14 +264,17 @@ export const parseGroth16ProofFromObject = (data: any, publicInputsData?: bigint
 export const createGroth16ProofFromRisc0 = (seal: Uint8Array, imageId: Uint8Array, journalBytes: Uint8Array,
     controlRoot: bigint = RISC0_CONTROL_ROOT, bn254ControlId: bigint = RISC0_BN254_CONTROL_ID): Groth16Proof => {
 
-    if(imageId.length <= 32){
+    if(imageId.length > 32){
         throw new Error("imageId must be 32 bytes")
     }
 
     const [constrolRoot0, controlRoot1] = splitDigest(controlRoot);
 
     const proof = seal.slice(4);
+
+
     const journal = createHash("sha256").update(journalBytes).digest();
+
     const claimDigest = digestReceiptClaim(ok(imageId, journal));
 
     const [claim0, claim1] = splitDigest(claimDigest);
@@ -330,6 +351,11 @@ export const checkGroth16VerifyingKey = (vk: Groth16VerifyingKey): boolean => {
 const digestReceiptClaim = (receipt: ReceiptClaim): Uint8Array => {
     const { tagDigest, input, preStateDigest, postStateDigest, output, exitCode } = receipt;
 
+    console.log("receipt: ", receipt);
+    console.log("tagDigest: ", tagDigest);
+
+
+
     // Concatenating all parts into one Buffer
     const data = Buffer.concat([
       tagDigest!,
@@ -362,6 +388,7 @@ function ok(imageId: Uint8Array, journalDigest: Uint8Array): ReceiptClaim {
 
     // Create and return the ReceiptClaim object
     return {
+        tagDigest: createHash('sha256').update(Buffer.from("risc0.ReceiptClaim")).digest(),
         preStateDigest: imageId,
         postStateDigest: SYSTEM_STATE_ZERO_DIGEST,
         exitCode,
@@ -494,7 +521,7 @@ const findItemFromKeyPatterns = (data: { [key: string]: any }, keyPatterns: stri
     if(bestMatch){
         return bestMatch;
     }
-    throw new Error(`No key found with patterns ${keyPatterns}`);
+    throw new KeyPatternNotFoundError(`No key found with patterns ${keyPatterns}`);
 }
 
 export const getPFromCurveId = (curveId: CurveId): bigint => {
